@@ -1,11 +1,10 @@
-#!/usr/bin/env python
+
 """
 Raspberry Pi Camera Test
 
 Capture frame from Pi Camera and display it to the screen using OpenCV (cv2).
 Also display the framerate (fps) to the screen. Use this to adjust the camera's
 focus. Press ctrl + c in the console or 'q' on the preview window to stop.
-
 """
 
 import cv2
@@ -52,3 +51,4 @@ else:
             break
     cap.release()
     cv2.destroyAllWindows()
+

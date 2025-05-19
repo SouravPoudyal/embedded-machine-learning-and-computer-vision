@@ -1,33 +1,28 @@
 #!/usr/bin/env python
 """
-Raspberry Pi Camera Image Capture
-Displays image preview on screen. Counts down and saves image. Restart program
-to take multiple photos.
+Raspberry Pi Camera Image Capture with GStreamer
+Displays image preview on screen. Counts down and saves image.
+Press 'q' to quit early.
 """
 import cv2
-import subprocess
+import time
 import numpy as np
 
 # Settings
-res_width = 96                          # Resolution of camera (width)
-res_height = 96                         # Resolution of camera (height)
+res_width = 640                         # Resolution of camera (width)
+res_height = 480                        # Resolution of camera (height)
 rotation = 0                            # Camera rotation (0, 90, 180, or 270)
-cam_format = "RGB888"                   # Color format
-draw_fps = False                        # Draw FPS on screen
+draw_fps = True                         # Draw FPS on screen
 save_path = "./"                        # Save images to current directory
 file_num = 0                            # Starting point for filename
 file_suffix = ".png"                    # Extension for image file
 precountdown = 2                        # Seconds before starting countdown
 countdown = 5                           # Seconds to count down from
 
-
-# Initial framerate value
-fps = 0
-
-# GStreamer pipeline string (identical to terminal command)
+# GStreamer pipeline for Raspberry Pi Camera
 pipeline = (
     "v4l2src device=/dev/video0 ! "
-    "video/x-raw,width=640,height=480,framerate=30/1 ! "
+    f"video/x-raw,width={res_width},height={res_height},framerate=30/1 ! "
     "videoconvert ! "
     "appsink drop=true sync=false"
 )
@@ -35,115 +30,123 @@ pipeline = (
 # Open capture
 cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
 
+if not cap.isOpened():
+    print("Error: Could not open camera using GStreamer pipeline.")
+    exit()
+
 ###########################################################################
 # Functions
 
 def file_exists(filepath):
-    """
-    Returns true if file exists, false otherwise
-    """
+    """Returns true if file exists, false otherwise"""
     try:
-        f = open(filepath, 'r')
-        exists = True
-        f.close()
+        with open(filepath, 'r') as f:
+            return True
     except:
-        exists = False
-    return exists
+        return False
 
 def get_filepath():
-    """
-    Returns the next available full path to image file
-    """
-
+    """Returns the next available full path to image file"""
     global file_num
-
-    # Loop through possible file numbers to see if that file already exists
     filepath = save_path + str(file_num) + file_suffix
     while file_exists(filepath):
         file_num += 1
         filepath = save_path + str(file_num) + file_suffix
-
     return filepath
-
 
 ################################################################################
 # Main
 
-# Figure out the name of the output image filename
 filepath = get_filepath()
+print(f"Image will be saved to: {filepath}")
+print(f"Starting {precountdown} second precountdown...")
 
-# Initial countdown timestamp
-    countdown_timestamp = cv2.getTickCount()
+# Initial timing
+start_time = time.time()
+last_count = time.time()
+fps_count = 0
+fps = 0
 
-    # Continuously capture frames
-    while True:
-                                            
-        # Get timestamp for calculating actual framerate
-        timestamp = cv2.getTickCount()
-        
-        # Get array that represents the image
-        img = camera.capture_array()
-        
-        # Rotate image
-        if rotation == 0:
-            pass
-        elif rotation == 90:
+# Precountdown
+while (time.time() - start_time) < precountdown:
+    ret, img = cap.read()
+    if not ret:
+        print("Error: Could not read frame during precountdown.")
+        break
+    
+    # Show countdown message
+    remaining = precountdown - (time.time() - start_time)
+    cv2.putText(img, f"Starting in: {remaining:.1f}", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+    cv2.imshow("Camera", img)
+    if cv2.waitKey(1) == ord('q'):
+        cap.release()
+        cv2.destroyAllWindows()
+        exit()
+
+print(f"Starting {countdown} second countdown...")
+
+# Countdown loop
+last_count = time.time()
+while countdown > 0:
+    frame_start = time.time()
+    ret, img = cap.read()
+    if not ret:
+        print("Error: Could not read frame during countdown.")
+        break
+
+    # Rotate if needed
+    if rotation == 90:
+        img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+    elif rotation == 180:
+        img = cv2.rotate(img, cv2.ROTATE_180)
+    elif rotation == 270:
+        img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+    # Update countdown every second
+    if (time.time() - last_count) >= 1.0:
+        last_count = time.time()
+        countdown -= 1
+
+    # Draw countdown
+    cv2.putText(img, str(countdown), 
+                (img.shape[1]//2 - 30, img.shape[0]//2),
+                cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)
+
+    # Calculate and draw FPS
+    if draw_fps:
+        fps_count += 1
+        if fps_count >= 10:  # Update FPS every 10 frames
+            fps = fps_count / (time.time() - frame_start)
+            fps_count = 0
+        cv2.putText(img, f"FPS: {fps:.1f}", (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+    cv2.imshow("Camera", img)
+    if cv2.waitKey(1) == ord('q'):
+        break
+
+# Capture final image
+if countdown <= 0:
+    ret, img = cap.read()
+    if ret:
+        # Rotate final image if needed
+        if rotation == 90:
             img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
         elif rotation == 180:
             img = cv2.rotate(img, cv2.ROTATE_180)
         elif rotation == 270:
             img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        else:
-            print("ERROR: rotation not supported. Must be 0, 90, 180, or 270.")
-            break
-
-        # Fix colors (as OpenCV works in BGR format)
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-       
-        # Each second, decrement countdown
-        if (timestamp - countdown_timestamp) / cv2.getTickFrequency() > 1.0:
-            countdown_timestamp = cv2.getTickCount()
-            countdown -= 1
-            
-            # When countdown reaches 0, break out of loop to save image
-            if countdown <= 0:
-                countdown = 0
-                break
-                
         
-        # Draw countdown on screen
-        cv2.putText(img,
-                    str(countdown),
-                    (int(round(res_width / 2) - 5),
-                        int(round(res_height / 2))),
-                    cv2.FONT_HERSHEY_PLAIN,
-                    1,
-                    (255, 255, 255))
-                    
-        # Draw framerate on frame
-        if draw_fps:
-            cv2.putText(img, 
-                        "FPS: " + str(round(fps, 2)), 
-                        (0, 12),
-                        cv2.FONT_HERSHEY_PLAIN,
-                        1,
-                        (255, 255, 255))
+        cv2.imwrite(filepath, img)
+        print(f"Image successfully saved to: {filepath}")
         
-        # Show the frame
-        cv2.imshow("Frame", img)
-        
-        # Calculate framrate
-        frame_time = (cv2.getTickCount() - timestamp) / cv2.getTickFrequency()
-        fps = 1 / frame_time
-        
-        # Press 'q' to quit
-        if cv2.waitKey(1) == ord('q'):
-            break
-    
-    # Capture image
-    cv2.imwrite(filepath, img)
-    print("Image saved to:", filepath)
+        # Show saved image briefly
+        cv2.imshow("Captured Image", img)
+        cv2.waitKey(1000)
+    else:
+        print("Error: Could not capture final image")
 
 # Clean up
+cap.release()
 cv2.destroyAllWindows()
-
