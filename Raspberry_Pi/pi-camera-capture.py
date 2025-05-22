@@ -4,8 +4,8 @@ import cv2
 cap = cv2.VideoCapture('/dev/video0', cv2.CAP_V4L)
 
 # set dimensions
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 2560)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1440)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 # take frame
 ret, frame = cap.read()
