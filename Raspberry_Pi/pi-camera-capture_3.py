@@ -10,7 +10,7 @@ class CameraCapture:
         self.rotation = 0
         self.cam_format = "RGB888"
         self.draw_fps = False
-        self.save_path = "./"
+        self.save_path = "./pictures/Class_1"
         self.file_num = 0
         self.file_suffix = ".png"
         self.precountdown = 2
